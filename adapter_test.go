@@ -15,8 +15,9 @@
 package gormadapter
 
 import (
+	"fmt"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
+	//"gorm.io/driver/postgres"
 	"log"
 	"os"
 	"testing"
@@ -41,6 +42,7 @@ func testGetPolicy(t *testing.T, e *casbin.Enforcer, res [][]string) {
 func initPolicy(t *testing.T, a *Adapter) {
 	// Because the DB is empty at first,
 	// so we need to load the policy from the file adapter (.CSV) first.
+	// 获取以 csv 为 adapter 的 enforcer，从中读取模型定义（rbac_model.conf）
 	e, err := casbin.NewEnforcer("examples/rbac_model.conf", "examples/rbac_policy.csv")
 	if err != nil {
 		panic(err)
@@ -49,16 +51,20 @@ func initPolicy(t *testing.T, a *Adapter) {
 	// This is a trick to save the current policy to the DB.
 	// We can't call e.SavePolicy() because the adapter in the enforcer is still the file adapter.
 	// The current policy means the policy in the Casbin enforcer (aka in memory).
+	fmt.Printf("%#v\n", e.GetModel()["p"]["p"])
+	// &model.Assertion{Key:"p", Value:"sub, obj, act", Tokens:[]string{"p_sub", "p_obj", "p_act"}, Policy:[][]string{[]string{"alice", "data1", "read"}, []string{"bob", "data2", "write"}, []string{"data2_admin", "data2", "read"}, []string{"data2_admin", "data2", "write"}}, RM:rbac.RoleManager(nil)}
 	err = a.SavePolicy(e.GetModel())
 	if err != nil {
 		panic(err)
 	}
 
 	// Clear the current policy.
+	// 只清除 e.model 中的 policy，不清除 db 中的
 	e.ClearPolicy()
 	testGetPolicy(t, e, [][]string{})
 
 	// Load the policy from DB.
+	// 将 db 中的 policy 加载到 e.modal 中
 	err = a.LoadPolicy(e.GetModel())
 	if err != nil {
 		panic(err)
@@ -82,6 +88,7 @@ func testSaveLoad(t *testing.T, a *Adapter) {
 
 func initAdapter(t *testing.T, driverName string, dataSourceName string, dbSpecified ...bool) *Adapter {
 	// Create an adapter
+	// 创建 casbin db
 	a, err := NewAdapter(driverName, dataSourceName, dbSpecified...)
 	if err != nil {
 		panic(err)
@@ -133,6 +140,7 @@ func testAutoSave(t *testing.T, a *Adapter) {
 	e, _ := casbin.NewEnforcer("examples/rbac_model.conf", a)
 	// AutoSave is enabled by default.
 	// Now we disable it.
+	// true 时 AddPolicy 会 policy 也会更新到 db，false 时只会更新到 enforcer
 	e.EnableAutoSave(false)
 
 	// Because AutoSave is disabled, the policy change only affects the policy in Casbin enforcer,
@@ -194,9 +202,9 @@ func TestAdapters(t *testing.T) {
 	testAutoSave(t, a)
 	testSaveLoad(t, a)
 
-	a = initAdapter(t, "postgres", "user=postgres host=127.0.0.1 port=5432 sslmode=disable")
-	testAutoSave(t, a)
-	testSaveLoad(t, a)
+	//a = initAdapter(t, "postgres", "user=postgres host=127.0.0.1 port=5432 sslmode=disable")
+	//testAutoSave(t, a)
+	//testSaveLoad(t, a)
 
 	db, err := gorm.Open(mysql.Open("root:@tcp(127.0.0.1:3306)/casbin"), &gorm.Config{})
 	if err != nil {
@@ -209,14 +217,18 @@ func TestAdapters(t *testing.T) {
 	a = initAdapterWithGormInstance(t, db)
 	testFilteredPolicy(t, a)
 
-	db, err = gorm.Open(postgres.Open("user=postgres host=127.0.0.1 port=5432 sslmode=disable dbname=casbin"), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-	a = initAdapterWithGormInstance(t, db)
-	testAutoSave(t, a)
-	testSaveLoad(t, a)
-
-	a = initAdapterWithGormInstance(t, db)
-	testFilteredPolicy(t, a)
+	//db, err = gorm.Open(postgres.Open("user=postgres host=127.0.0.1 port=5432 sslmode=disable dbname=casbin"), &gorm.Config{})
+	//if err != nil {
+	//	panic(err)
+	//}
+	//a = initAdapterWithGormInstance(t, db)
+	//testAutoSave(t, a)
+	//testSaveLoad(t, a)
+	//
+	//a = initAdapterWithGormInstance(t, db)
+	//testFilteredPolicy(t, a)
 }
+
+// Test configuration - Package: github.com/casbin/gorm-adapter/v3
+// go mod tidy
+// go test
